@@ -46,6 +46,9 @@ const addRecord = async (req, res) => {
     date,
     calorie_count,
   } = req.body;
+
+  const photoData = photo instanceof Buffer ? photo.toString('base64') : photo;
+
   const client = await pool.connect();
 
   try {
@@ -65,7 +68,7 @@ const addRecord = async (req, res) => {
       VALUES ($1, $2, $3, $4, $5, $6, $7) 
       RETURNING *`,
       [
-        photo,
+        photoData,
         description,
         is_gym_day,
         is_failure,
