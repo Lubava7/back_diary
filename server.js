@@ -1,56 +1,89 @@
-// server.js
-const express = require('express');
-const { Pool } = require('pg');
-const cors = require('cors');
-require('dotenv').config();
+import pg from 'pg';
+const { Pool } = pg;
+import dotenv from 'dotenv';
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+dotenv.config();
 
-// Database configuration
 const pool = new Pool({
+  database: process.env.DB_NAME,
   user: process.env.DB_USER,
   host: process.env.DB_HOST,
-  database: process.env.DB_NAME,
   password: process.env.DB_PASSWORD,
-  port: process.env.DB_PORT || 5432,
+  port: process.env.DB_PORT,
 });
 
-// Test database connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) {
-    console.error('Database connection error:', err);
-  } else {
-    console.log('Database connected successfully');
-  }
-});
-
-// Example API endpoints
-app.get('/api/data', async (req, res) => {
+async function getPostgresVersion() {
+  const client = await pool.connect();
   try {
-    const result = await pool.query('SELECT * FROM your_table');
-    res.json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const res = await client.query('SELECT version()');
+    console.log(res.rows[0]);
+  } finally {
+    client.release();
   }
-});
+}
 
-// POST endpoint example
-app.post('/api/data', async (req, res) => {
-  const { name, email } = req.body; // adjust according to your table columns
+const getRecords = async (req, res) => {
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
-      'INSERT INTO your_table (name, email) VALUES ($1, $2) RETURNING *',
-      [name, email]
+    const records = await client.query('SELECT * FROM diary_records');
+    res.json(records.rows);
+  } catch (error) {
+    console.error('Error executing query:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  } finally {
+    client.release();
+  }
+};
+
+const addRecord = async (req, res) => {
+  console.log('Received request to add record');
+  const {
+    photo,
+    description,
+    is_gym_day,
+    is_failure,
+    is_full_workout,
+    date,
+    calorie_count,
+  } = req.body;
+  const client = await pool.connect();
+
+  try {
+    console.log('Request body:', {
+      'photo length': photo ? photo.length : 0,
+      description,
+      is_gym_day,
+      is_failure,
+      is_full_workout,
+      date,
+      calorie_count,
+    });
+
+    const result = await client.query(
+      `INSERT INTO diary_records 
+      (photo, description, is_gym_day, is_failure, is_full_workout, date, calorie_count) 
+      VALUES ($1, $2, $3, $4, $5, $6, $7) 
+      RETURNING *`,
+      [
+        photo,
+        description,
+        is_gym_day,
+        is_failure,
+        is_full_workout,
+        date,
+        calorie_count,
+      ]
     );
     res.json(result.rows[0]);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error('Error adding record:', error);
+    res.status(500).json({
+      error: 'Internal Server Error',
+      details: error.message,
+    });
+  } finally {
+    client.release();
   }
-});
+};
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+export { pool, getRecords, addRecord, getPostgresVersion };
